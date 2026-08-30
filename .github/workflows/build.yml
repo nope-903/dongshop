@@ -1,0 +1,56 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Download source code
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Find and extract ZIP
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Filter "*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            Write-Error "ZIP file not found."
+          }
+
+          New-Item -ItemType Directory -Force -Path "source" | Out-Null
+          Expand-Archive -Path $zip.FullName -DestinationPath "source" -Force
+
+          $root = Get-ChildItem "source" -Directory | Select-Object -First 1
+          if ($root) {
+            Copy-Item "$($root.FullName)\*" "." -Recurse -Force
+          }
+
+      - name: Install required packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame pynput pyinstaller
+
+      - name: Build EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name "AC_Keyboard_Sounder" --icon "icon.ico" --add-data "sounds;sounds" --add-data "icon.ico;." main.py
+
+      - name: Create ZIP
+        run: |
+          Compress-Archive -Path "dist\AC_Keyboard_Sounder.exe" -DestinationPath "AC_Keyboard_Sounder-Windows.zip"
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: AC_Keyboard_Sounder-Windows
+          path: AC_Keyboard_Sounder-Windows.zip
+          if-no-files-found: error
